@@ -3,9 +3,15 @@ package logger
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"gorm.io/gorm/logger"
+)
+
+var (
+	gormLoggerInstance *GormLogger
+	gormLoggerOnce     sync.Once
 )
 
 // GormLogger is a custom logger that implements the Gorm logger.Interface.
@@ -15,12 +21,15 @@ type GormLogger struct {
 	logLevel logger.LogLevel
 }
 
-// NewGormLogger creates a new GormLogger using the provided AppLogger instance.
-func NewGormLogger(appLogger *AppLogger, level logger.LogLevel) *GormLogger {
-	return &GormLogger{
-		logger:   appLogger,
-		logLevel: level,
-	}
+// NewGormLogger initializes and returns a singleton instance of GormLogger using the global AppLogger.
+func NewGormLogger(level logger.LogLevel) *GormLogger {
+	gormLoggerOnce.Do(func() {
+		gormLoggerInstance = &GormLogger{
+			logger:   GetLogger(), // Usa a instância do AppLogger
+			logLevel: level,
+		}
+	})
+	return gormLoggerInstance
 }
 
 // LogMode sets the logging level for the Gorm logger.
@@ -32,21 +41,21 @@ func (g *GormLogger) LogMode(level logger.LogLevel) logger.Interface {
 // Info logs informational messages.
 func (g *GormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if g.logLevel >= logger.Info {
-		g.logger.sugarLogger.Infof(msg, data...)
+		g.logger.Infof(msg, data...)
 	}
 }
 
 // Warn logs warning messages.
 func (g *GormLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if g.logLevel >= logger.Warn {
-		g.logger.sugarLogger.Warnf(msg, data...)
+		g.logger.Warnf(msg, data...)
 	}
 }
 
 // Error logs error messages.
 func (g *GormLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if g.logLevel >= logger.Error {
-		g.logger.sugarLogger.Errorf(msg, data...)
+		g.logger.Errorf(msg, data...)
 	}
 }
 
@@ -61,11 +70,11 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (stri
 
 	switch {
 	case err != nil && g.logLevel >= logger.Error:
-		g.logger.sugarLogger.Errorf("SQL Error: %s - %v [Rows affected: %d, Elapsed time: %v]", sql, err, rows, elapsed)
+		g.logger.Errorf("SQL Error: %s - %v [Rows affected: %d, Elapsed time: %v]", sql, err, rows, elapsed)
 	case elapsed > time.Millisecond*200 && g.logLevel >= logger.Warn:
 		// Log if the execution time is longer than 200ms
-		g.logger.sugarLogger.Warnf("Slow SQL (> 200ms): %s [Rows affected: %d, Elapsed time: %v]", sql, rows, elapsed)
+		g.logger.Warnf("Slow SQL (> 200ms): %s [Rows affected: %d, Elapsed time: %v]", sql, rows, elapsed)
 	case g.logLevel >= logger.Info:
-		g.logger.sugarLogger.Infof("SQL Executed: %s [Rows affected: %d, Elapsed time: %v]", sql, rows, elapsed)
+		g.logger.Infof("SQL Executed: %s [Rows affected: %d, Elapsed time: %v]", sql, rows, elapsed)
 	}
 }
