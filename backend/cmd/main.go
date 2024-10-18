@@ -7,6 +7,8 @@ import (
 	"jazz/backend/pkg/cache"
 	"jazz/backend/pkg/database"
 	"jazz/backend/pkg/logger"
+	"jazz/backend/routes"
+	"net/http"
 
 	"gorm.io/gorm"
 )
@@ -45,7 +47,8 @@ func runApplication(_ *gorm.DB, cache cache.Cache) {
 	cache.Set(key, value, 60)
 	logger.Logger.Infof("Value '%s' set in cache with key '%s'", value, key)
 
-	// Consultando o banco de dados (exemplo fictício)
-	// logger.Logger.Infof("Database connection details: %v", db)
-	// Outras lógicas da aplicação...
+	// Start server
+	port := ":8080"
+	fmt.Printf("Starting server on port %s\n", port)
+	http.ListenAndServe(port, routes.SetupRoutes())
 }
