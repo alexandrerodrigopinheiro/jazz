@@ -2,9 +2,7 @@
 
 package configs
 
-import (
-	"strings"
-)
+import "strings"
 
 // GetDatabaseConfig returns database configurations as a map, similar to Laravel's database configuration file.
 func GetDatabaseConfig() map[string]interface{} {
@@ -14,7 +12,7 @@ func GetDatabaseConfig() map[string]interface{} {
 			"sqlite": map[string]interface{}{
 				"driver":                  "sqlite",
 				"url":                     Get("DB_URL"),
-				"database":                GetWithDefault("DB_DATABASE", "database/database.sqlite"),
+				"database":                GetWithDefault("DB_DATABASE", "../../database/database.sqlite"),
 				"prefix":                  "",
 				"foreign_key_constraints": GetWithDefault("DB_FOREIGN_KEYS", true),
 				"busy_timeout":            Get("DB_BUSY_TIMEOUT"),
