@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"jazz/backend/configs"
+	"jazz/backend/pkg/logger"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -29,7 +30,7 @@ func NewDynamoDBCache() *DynamoDBCache {
 	tableName := cacheConfig["table"].(string)
 
 	if awsAccessKey == "" || awsSecretKey == "" {
-		fmt.Println("AWS credentials are not set. Falling back to default cache.")
+		logger.Logger.Warn("AWS credentials are not set. Falling back to default cache.")
 		return nil
 	}
 
@@ -44,13 +45,13 @@ func NewDynamoDBCache() *DynamoDBCache {
 
 	sess, err := session.NewSession(awsConfig)
 	if err != nil {
-		fmt.Println("Failed to create AWS session:", err)
+		logger.Logger.Errorw("Failed to create AWS session", "error", err)
 		return nil
 	}
 
 	client := dynamodb.New(sess)
 
-	fmt.Printf("Connected to DynamoDB at table: %s in region: %s\n", tableName, awsRegion)
+	logger.Logger.Infof("Connected to DynamoDB at table: %s in region: %s", tableName, awsRegion)
 	return &DynamoDBCache{
 		client: client,
 		table:  tableName,
@@ -62,6 +63,7 @@ func (d *DynamoDBCache) Set(key string, value interface{}, expiration time.Durat
 	expirationTime := time.Now().Add(expiration).Unix()
 	valueBytes, err := json.Marshal(value)
 	if err != nil {
+		logger.Logger.Errorw("Failed to serialize value", "key", key, "error", err)
 		return err
 	}
 
@@ -82,6 +84,10 @@ func (d *DynamoDBCache) Set(key string, value interface{}, expiration time.Durat
 		Item:      item,
 	})
 
+	if err != nil {
+		logger.Logger.Errorw("Failed to set value in DynamoDB", "key", key, "error", err)
+	}
+
 	return err
 }
 
@@ -92,17 +98,20 @@ func (d *DynamoDBCache) Remember(key string, expiration time.Duration, callback 
 	// Check if value is already in the cache
 	value, err := d.Get(key)
 	if err == nil && value != nil {
+		logger.Logger.Infow("Cache hit", "key", key)
 		return value, nil
 	}
 
 	// If value is not cached, execute the callback
 	result, err = callback()
 	if err != nil {
+		logger.Logger.Errorw("Callback execution failed", "key", key, "error", err)
 		return result, err
 	}
 
 	// Cache the value
 	if err := d.Set(key, result, expiration); err != nil {
+		logger.Logger.Errorw("Failed to set value in DynamoDB after callback", "key", key, "error", err)
 		return result, err
 	}
 
@@ -119,6 +128,11 @@ func (d *DynamoDBCache) Forget(key string) error {
 			},
 		},
 	})
+
+	if err != nil {
+		logger.Logger.Errorw("Failed to delete value from DynamoDB", "key", key, "error", err)
+	}
+
 	return err
 }
 
@@ -134,6 +148,11 @@ func (d *DynamoDBCache) Get(key string) (interface{}, error) {
 	})
 
 	if err != nil || result.Item == nil {
+		if err != nil {
+			logger.Logger.Errorw("Failed to get value from DynamoDB", "key", key, "error", err)
+		} else {
+			logger.Logger.Warnw("Cache miss in DynamoDB", "key", key)
+		}
 		return nil, nil
 	}
 

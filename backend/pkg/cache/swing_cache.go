@@ -3,6 +3,8 @@ package cache
 import (
 	"sync"
 	"time"
+
+	"jazz/backend/pkg/logger"
 )
 
 // SwingCache is a simple in-memory cache that uses a sync.Map to store values.
@@ -18,6 +20,10 @@ type SwingCacheEntry[T any] struct {
 
 // NewSwingCache creates a new instance of SwingCache.
 func NewSwingCache() *SwingCache {
+	// Garantir que o logger esteja inicializado antes de usá-lo
+	logger.InitializeLogger()
+
+	logger.Logger.Info("Initializing SwingCache")
 	return &SwingCache{}
 }
 
@@ -34,26 +40,28 @@ func (o *SwingCache) Set(key string, value interface{}, expiration time.Duration
 
 // Remember retrieves a value from the cache or executes a callback to get it if not present.
 func (o *SwingCache) Remember(key string, expiration time.Duration, callback func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
 	// Check if value is already in the cache
 	entry, found := o.cache.Load(key)
 	if found {
 		cacheEntry := entry.(SwingCacheEntry[interface{}])
 		if time.Now().Unix() < cacheEntry.Expiration {
+			logger.Logger.Infow("Cache hit in SwingCache", "key", key)
 			return cacheEntry.Value, nil
 		}
+		logger.Logger.Warnw("Cache entry expired in SwingCache", "key", key)
 		o.Forget(key)
 	}
 
 	// If value is not cached, execute the callback
 	result, err := callback()
 	if err != nil {
+		logger.Logger.Errorw("Callback execution failed", "key", key, "error", err)
 		return result, err
 	}
 
 	// Cache the value
 	if err := o.Set(key, result, expiration); err != nil {
+		logger.Logger.Errorw("Failed to set value in SwingCache after callback", "key", key, "error", err)
 		return result, err
 	}
 
@@ -70,10 +78,12 @@ func (o *SwingCache) Forget(key string) error {
 func (o *SwingCache) Get(key string) (interface{}, error) {
 	entry, found := o.cache.Load(key)
 	if !found {
+		logger.Logger.Warnw("Cache miss in SwingCache", "key", key)
 		return nil, nil
 	}
 	cacheEntry := entry.(SwingCacheEntry[interface{}])
 	if time.Now().Unix() > cacheEntry.Expiration {
+		logger.Logger.Warnw("Cache entry expired in SwingCache", "key", key)
 		o.Forget(key)
 		return nil, nil
 	}

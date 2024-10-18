@@ -1,13 +1,11 @@
 package cache
 
-import (
-	"time"
-)
+import "time"
 
-// Cache Interface - defines methods for cache operations
+// Cache interface defines the required methods for a cache implementation.
 type Cache interface {
-	Remember(key string, expiration time.Duration, callback func() (interface{}, error)) (interface{}, error)
 	Set(key string, value interface{}, expiration time.Duration) error
-	Forget(key string) error
 	Get(key string) (interface{}, error)
+	Forget(key string) error
+	Remember(key string, expiration time.Duration, callback func() (interface{}, error)) (interface{}, error)
 }

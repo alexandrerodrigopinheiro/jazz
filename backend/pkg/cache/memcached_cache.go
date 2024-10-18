@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"jazz/backend/configs"
+	"jazz/backend/pkg/logger"
 
 	"github.com/bradfitz/gomemcache/memcache"
 )
@@ -23,31 +24,29 @@ func NewMemcachedCache() *MemcachedCache {
 	port, okPort := cacheConfig["port"].(int)
 
 	if !okHost || host == "" || !okPort {
-		fmt.Println("MEMCACHED_HOST or MEMCACHED_PORT is not set or invalid. Falling back to default cache.")
+		logger.Logger.Warn("MEMCACHED_HOST or MEMCACHED_PORT is not set or invalid. Falling back to default cache.")
 		return nil
 	}
 
 	portStr := fmt.Sprintf("%d", port)
-
 	client := memcache.New(fmt.Sprintf("%s:%s", host, portStr))
 
 	// Testing the connection with Memcached
-	// `memcache.Client` does not have a `Ping()` function, so we will do a simple `Set` and `Get` operation to test
 	testKey := "test_connection"
 	testValue := []byte("ping")
 	err := client.Set(&memcache.Item{Key: testKey, Value: testValue, Expiration: 1})
 	if err != nil {
-		fmt.Printf("Memcached unavailable at %s:%s. Error: %s. Falling back to default cache.\n", host, portStr, err)
+		logger.Logger.Warnf("Memcached unavailable at %s:%s. Error: %s. Falling back to default cache.", host, portStr, err)
 		return nil
 	}
 
 	_, err = client.Get(testKey)
 	if err != nil {
-		fmt.Printf("Memcached unavailable at %s:%s. Error: %s. Falling back to default cache.\n", host, portStr, err)
+		logger.Logger.Warnf("Memcached unavailable at %s:%s. Error: %s. Falling back to default cache.", host, portStr, err)
 		return nil
 	}
 
-	fmt.Printf("Connected to Memcached at %s:%s\n", host, portStr)
+	logger.Logger.Infof("Connected to Memcached at %s:%s", host, portStr)
 	return &MemcachedCache{client: client}
 }
 
@@ -55,6 +54,7 @@ func NewMemcachedCache() *MemcachedCache {
 func (m *MemcachedCache) Set(key string, value interface{}, expiration time.Duration) error {
 	valueBytes, err := json.Marshal(value)
 	if err != nil {
+		logger.Logger.Errorw("Failed to serialize value", "key", key, "error", err)
 		return err
 	}
 
@@ -69,11 +69,10 @@ func (m *MemcachedCache) Set(key string, value interface{}, expiration time.Dura
 
 // Remember stores a value in Memcached using a callback if the value does not already exist.
 func (m *MemcachedCache) Remember(key string, expiration time.Duration, callback func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
 	// Check if value is already in the cache
 	value, err := m.Get(key)
 	if err == nil && value != nil {
+		var result interface{}
 		err = json.Unmarshal([]byte(value.(string)), &result)
 		if err == nil {
 			return result, nil
@@ -81,13 +80,15 @@ func (m *MemcachedCache) Remember(key string, expiration time.Duration, callback
 	}
 
 	// If value is not cached, execute the callback
-	result, err = callback()
+	result, err := callback()
 	if err != nil {
+		logger.Logger.Errorw("Callback execution failed", "key", key, "error", err)
 		return result, err
 	}
 
 	// Cache the value
 	if err := m.Set(key, result, expiration); err != nil {
+		logger.Logger.Errorw("Failed to set value in cache after callback", "key", key, "error", err)
 		return result, err
 	}
 
@@ -96,17 +97,26 @@ func (m *MemcachedCache) Remember(key string, expiration time.Duration, callback
 
 // Forget removes a value from Memcached.
 func (m *MemcachedCache) Forget(key string) error {
-	return m.client.Delete(key)
+	err := m.client.Delete(key)
+	if err != nil && err != memcache.ErrCacheMiss {
+		logger.Logger.Errorw("Failed to delete value from Memcached", "key", key, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // Get retrieves a value from Memcached if it exists and has not expired.
 func (m *MemcachedCache) Get(key string) (interface{}, error) {
 	item, err := m.client.Get(key)
 	if err == memcache.ErrCacheMiss {
+		logger.Logger.Warnw("Cache miss", "key", key)
 		return nil, nil
 	}
 	if err != nil {
+		logger.Logger.Errorw("Failed to get value from Memcached", "key", key, "error", err)
 		return nil, err
 	}
+
 	return string(item.Value), nil
 }

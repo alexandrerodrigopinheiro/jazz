@@ -15,42 +15,43 @@ func runCommonCacheTests(t *testing.T, cache Cache) {
 	// Test Set
 	err := cache.Set(key, value, expiration)
 	if err != nil {
-		logger.Logger.Errorf("Failed to set value in cache: %s", err)
+		logger.Logger.Errorw("Failed to set value in cache", "key", key, "error", err)
 		t.Fatalf("Failed to set value in cache: %s", err)
 	}
 
 	// Test Get
 	cachedValue, err := cache.Get(key)
 	if err != nil {
-		logger.Logger.Errorf("Failed to get value from cache: %s", err)
+		logger.Logger.Errorw("Failed to get value from cache", "key", key, "error", err)
 		t.Fatalf("Failed to get value from cache: %s", err)
 	}
 	if cachedValue != value {
-		logger.Logger.Warnf("Expected %s but got %s", value, cachedValue)
+		logger.Logger.Warnw("Cache value mismatch", "expected", value, "got", cachedValue)
 		t.Errorf("Expected %s but got %s", value, cachedValue)
 	}
 
 	// Test Forget
 	err = cache.Forget(key)
 	if err != nil {
-		logger.Logger.Errorf("Failed to forget value in cache: %s", err)
+		logger.Logger.Errorw("Failed to forget value in cache", "key", key, "error", err)
 		t.Fatalf("Failed to forget value in cache: %s", err)
 	}
 
 	// Ensure value is removed
 	cachedValue, err = cache.Get(key)
 	if err != nil {
-		logger.Logger.Errorf("Failed to get value from cache: %s", err)
+		logger.Logger.Errorw("Failed to get value from cache after forget", "key", key, "error", err)
 		t.Fatalf("Failed to get value from cache: %s", err)
 	}
 	if cachedValue != nil {
-		logger.Logger.Warn("Expected value to be removed from cache")
+		logger.Logger.Warnw("Cache value should be removed but still exists", "key", key)
 		t.Errorf("Expected value to be removed from cache")
 	}
 }
 
 // TestFileCache tests the FileCache implementation
 func TestFileCache(t *testing.T) {
+	logger.InitializeLogger() // Inicializa o logger antes de executar o teste
 	cache := NewFileCache()
 	if cache == nil {
 		logger.Logger.Warn("Skipping FileCache: FileCache is not available")
@@ -71,6 +72,8 @@ func TestRedisCache(t *testing.T) {
 
 // TestDatabaseCache tests the DatabaseCache implementation
 func TestDatabaseCache(t *testing.T) {
+	logger.InitializeLogger() // Inicializa o logger antes do teste
+
 	cache := NewDatabaseCache()
 	if cache == nil {
 		logger.Logger.Warn("Skipping DatabaseCache: Database is not available or not configured properly")
